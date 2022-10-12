@@ -1,4 +1,4 @@
-package main 
+package main
 
 const APP_NAME = "Pomadorik"
 
@@ -7,8 +7,8 @@ const APP_HEIGHT = 250
 const SOUND_FILE = "timer.mp3"
 
 // pause name: seconds
-var DEFAULT_TIMERS = map[string]int{ 
-	"TOMATO": 1200, // 1200 sec = 20 min
-	"SHORT": 300,
-	"LONG": 600,
+var DEFAULT_TIMERS = map[string]int{
+	"TOMATO": 1500, // 1500 sec = 25 min
+	"SHORT":  300,
+	"LONG":   600,
 }

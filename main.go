@@ -1,56 +1,59 @@
 package main
 
 import (
+	_ "embed"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/desktop"
-	"fyne.io/fyne/v2/widget"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/widget"
 	"fyne.io/systray"
 
+	"github.com/faiface/beep/effects"
 	"github.com/faiface/beep/mp3"
 	"github.com/faiface/beep/speaker"
-	"github.com/faiface/beep/effects"
 
-	"pomadorik/icon"
-
-	"io/ioutil"
-	"path/filepath"
-	"os"
-	"log"
 	"fmt"
 	"image/color"
+	"log"
+	"os"
 	"time"
 )
 
+//go:embed icon/app-icon.png
+var iconFile []byte
+var iconResource = fyne.NewStaticResource("icon", iconFile)
+
 var TextColors = map[string]color.RGBA{
-  "green": color.RGBA{85, 165, 34, 1},
-  "grey": color.RGBA{82, 82, 82, 1},
-  "white": color.RGBA{255, 255, 255, 1},
-  "lightgrey": color.RGBA{57, 57, 57, 255},
-  "lightgrey2": color.RGBA{142, 142, 142, 255},
+	"green":      {85, 165, 34, 255},
+	"grey":       {82, 82, 82, 128},
+	"white":      {255, 255, 255, 0},
+	"lightgrey":  {57, 57, 57, 255},
+	"lightgrey2": {142, 142, 142, 255},
 }
 
-var TIMER = DEFAULT_TIMERS["TOMATO"] 
+var TIMER = DEFAULT_TIMERS["TOMATO"]
 var TICKER *time.Ticker = nil
-var TIMER_TXT *canvas.Text = nil 
+var TIMER_TXT *canvas.Text = nil
 
 type BtnHandlerFn func(string, *canvas.Text) func()
+
 var mainWindow fyne.Window
-var App fyne.App 
+var App fyne.App
 
 func main() {
 	App = app.NewWithID(APP_NAME)
 
-	// setuping window 
+	// setuping window
 	mainWindow = App.NewWindow(APP_NAME)
 	mainWindow.Resize(fyne.NewSize(APP_WIDTH, APP_HEIGHT))
 
-	// set icon 
-	r, _ := LoadResourceFromPath("./icon/app-icon.png")
-	mainWindow.SetIcon(r)
+	// set icon
+	// r, _ := LoadResourceFromPath("./icon/app-icon.png")
+	mainWindow.SetIcon(iconResource)
 
 	if desk, ok := App.(desktop.App); ok {
 		setupSystray(desk)
@@ -62,7 +65,7 @@ func main() {
 		mainWindow.Hide()
 	})
 
-	content := buildContent(func (timerName string, timerTxt *canvas.Text) func() {
+	content := buildContent(func(timerName string, timerTxt *canvas.Text) func() {
 		TIMER_TXT = timerTxt
 
 		// set on "space" start a tomato timer
@@ -81,11 +84,17 @@ func main() {
 
 	mainWindow.SetContent(content)
 	fmt.Println("window init...")
-
+	mainWindow.CenterOnScreen()
 	mainWindow.Show()
 	App.Lifecycle().SetOnStarted(func() {
 		systray.SetTooltip(APP_NAME)
 		systray.SetTitle(APP_NAME)
+	})
+	App.Lifecycle().SetOnStopped(func() {
+		// avoid unsafe error
+		if TICKER != nil {
+			TICKER.Stop()
+		}
 	})
 	App.Run()
 }
@@ -96,11 +105,10 @@ func main() {
 // 	a.SendNotification(fyne.NewNotification("Example Title", "Example Content"))
 // }
 
-
 // ==============================================> SYSTRAY
 func setupSystray(desk desktop.App) {
 	// Set up menu
-	desk.SetSystemTrayIcon(icon.Data)
+	desk.SetSystemTrayIcon(iconResource)
 
 	menu := fyne.NewMenu(APP_NAME,
 		fyne.NewMenuItem("Open", mainWindow.Show),
@@ -114,40 +122,8 @@ func setupSystray(desk desktop.App) {
 		fyne.NewMenuItem("Long break", func() {
 			startCountdown(DEFAULT_TIMERS["LONG"])
 		}),
-		)
+	)
 	desk.SetSystemTrayMenu(menu)
-}
-
-// ==============================================> ICON
-type Resource interface {
-	Name() string
-	Content() []byte
-}
-type StaticResource struct {
-	StaticName    string
-	StaticContent []byte
-}
-func (r *StaticResource) Name() string {
-	return r.StaticName
-}
-func (r *StaticResource) Content() []byte {
-	return r.StaticContent
-}
-
-func LoadResourceFromPath(path string) (Resource, error) {
-	bytes, err := ioutil.ReadFile(filepath.Clean(path))
-	if err != nil {
-			return nil, err
-	}
-	name := filepath.Base(path)
-	return NewStaticResource(name, bytes), nil
-}
-
-func NewStaticResource(name string, content []byte) *StaticResource {
-	return &StaticResource{
-			StaticName:    name,
-			StaticContent: content,
-	}
 }
 
 func buildContent(onBtnHandler BtnHandlerFn) fyne.CanvasObject {
@@ -164,7 +140,7 @@ func buildContent(onBtnHandler BtnHandlerFn) fyne.CanvasObject {
 		// header (timer)
 		container.New(layout.NewCenterLayout(), timer),
 
-		// btns 
+		// btns
 		tomatoBtn,
 		buildSpace(),
 
@@ -173,25 +149,23 @@ func buildContent(onBtnHandler BtnHandlerFn) fyne.CanvasObject {
 		buildSpace(),
 
 		container.New(
-			layout.NewCenterLayout(), 
+			layout.NewCenterLayout(),
 			// container.New(layout.NewVBoxLayout(),
-				buildTxtWithStyle(
-					"Press \"Space\" to start Tomato",
-					TextColors["grey"],
-					10,
-				),
+			buildTxtWithStyle(
+				"Press \"Space\" to start Tomato",
+				TextColors["grey"],
+				10,
+			),
 			// ),
 
 		),
-			
 	)
 	return content
 }
 
-func buildTxtWithStyle(title string, textColor color.RGBA, textSize float32) *canvas.Text {
+func buildTxtWithStyle(title string, textColor color.Color, textSize float32) *canvas.Text {
 	txt := canvas.NewText(title, textColor)
 	txt.TextSize = textSize
-	// txt.Alignment = fyne.TextAlignTrailing 
 	return txt
 }
 
@@ -206,7 +180,7 @@ func buildSpace() *canvas.Text {
 }
 
 func updateTimerTxt(timer int, timerTxt *canvas.Text) {
-	timerTxt.Text = formatTimer(timer) 
+	timerTxt.Text = formatTimer(timer)
 	timerTxt.Refresh()
 
 	systray.SetTitle(fmt.Sprintf("%s (%s)", APP_NAME, timerTxt.Text))
@@ -214,15 +188,15 @@ func updateTimerTxt(timer int, timerTxt *canvas.Text) {
 }
 
 func startCountdown(defaultTime int) {
-	// if timer already started, at again start, just stop it 
+	// if timer already started, at again start, just stop it
 	TIMER = defaultTime
-	updateTimerTxt(TIMER, TIMER_TXT) 
+	updateTimerTxt(TIMER, TIMER_TXT)
 
 	if TICKER != nil {
 		TICKER.Stop()
 	}
 
-	TICKER = startTimer(func (ticker *time.Ticker) {
+	TICKER = startTimer(func(ticker *time.Ticker) {
 		updateTimerTxt(TIMER, TIMER_TXT)
 
 		if TIMER == 0 {
@@ -244,9 +218,10 @@ func startTimer(onTickFn func(*time.Ticker)) *time.Ticker {
 	go func() {
 		for {
 			select {
-				case <-done: return
-				case <-ticker.C: 
-					onTickFn(ticker)
+			case <-done:
+				return
+			case <-ticker.C:
+				onTickFn(ticker)
 			}
 		}
 	}()
@@ -264,21 +239,21 @@ func playSound() {
 		log.Fatal("Unable to stream sound " + SOUND_FILE)
 	}
 
-	volume := effects.Volume{ 
+	volume := effects.Volume{
 		Streamer: stream,
-		Base: 2,
-		Volume: 1.6,
-		Silent: false,
+		Base:     2,
+		Volume:   1.6,
+		Silent:   false,
 	}
 
-	// activate speakers 
+	// activate speakers
 	speaker.Init(
 		format.SampleRate,
 		format.SampleRate.N(time.Second/10),
 	)
 
 	// play
-	speaker.Play(&volume) 
+	speaker.Play(&volume)
 }
 
 func formatTimer(timer int) string {
